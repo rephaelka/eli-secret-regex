@@ -1,0 +1,7 @@
+[
+  {"path": "ec2.yaml"},
+  {"path": "s3.tf"},
+  {"path": "aws_secrets.yml"},
+  {"path": "package.json"},
+  {"path": "yarn.lock"}
+]

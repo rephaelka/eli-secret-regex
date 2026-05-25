@@ -1,0 +1,155 @@
+# =============================================================================
+# Crossplane Composition — spec.mode: Pipeline (required by crossplane render)
+#
+# Vulnerabilities intentionally embedded in the composed resources:
+#   [1] HIGH   — RDSInstance with storageEncrypted: false
+#   [2] HIGH   — S3Bucket with public-read ACL + no versioning
+#   [3] MEDIUM — SQS Queue with SSE disabled (no kmsMasterKeyId)
+#   [4] LOW    — ECS Cluster with containerInsights disabled
+#
+# Rendered with:
+#   crossplane render xr.yaml composition.yaml functions.yaml \
+#     --crossplane-binary=$(which crossplane)
+# =============================================================================
+
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vulnerable-infra-composition
+  labels:
+    crossplane.io/xrd: xvulnerableinfras.mock.example.org
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: mock.example.org/v1alpha1
+    kind: XVulnerableInfra
+
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+
+          # -------------------------------------------------------------------
+          # [1] HIGH — DB Instance Storage Not Encrypted
+          #     storageEncrypted: false triggers CWE-311 / CVSS 7.1
+          # -------------------------------------------------------------------
+          - name: rds-instance
+            base:
+              apiVersion: database.aws.crossplane.io/v1beta1
+              kind: RDSInstance
+              metadata:
+                name: vulnerable-rds
+              spec:
+                forProvider:
+                  region: us-east-1
+                  dbInstanceClass: db.t3.micro
+                  engine: mysql
+                  engineVersion: "8.0.32"
+                  allocatedStorage: 20
+                  storageType: gp2
+                  masterUsername: admin
+                  publiclyAccessible: true          # <-- exposes DB to internet
+                  skipFinalSnapshotBeforeDeletion: true
+                  storageEncrypted: false            # <-- HIGH: no encryption at rest
+                writeConnectionSecretToRef:
+                  name: vulnerable-rds-conn
+                  namespace: crossplane-system
+                providerConfigRef:
+                  name: aws-provider
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-rds"
+
+          # -------------------------------------------------------------------
+          # [2] HIGH — S3 Bucket with public-read ACL and no versioning
+          #     Triggers AVS-AWS-0086 (public access) + AVS-AWS-0090 (versioning)
+          # -------------------------------------------------------------------
+          - name: s3-bucket
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: Bucket
+              metadata:
+                name: vulnerable-public-bucket
+              spec:
+                forProvider:
+                  region: us-east-1
+                  acl: public-read                  # <-- HIGH: public read access
+                  # versioning block intentionally omitted  <-- HIGH: no versioning
+                  serverSideEncryptionConfiguration: []  # <-- no encryption
+                providerConfigRef:
+                  name: aws-provider
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-bucket"
+
+          # -------------------------------------------------------------------
+          # [3] MEDIUM — SQS Queue with SSE disabled
+          #     kmsMasterKeyId omitted → CWE-319 / CVSS 5.5
+          # -------------------------------------------------------------------
+          - name: sqs-queue
+            base:
+              apiVersion: sqs.aws.crossplane.io/v1beta1
+              kind: Queue
+              metadata:
+                name: vulnerable-sqs
+              spec:
+                forProvider:
+                  region: us-east-1
+                  delaySeconds: 0
+                  # kmsMasterKeyId intentionally omitted  <-- MEDIUM: no SSE
+                providerConfigRef:
+                  name: aws-provider
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-sqs"
+
+          # -------------------------------------------------------------------
+          # [4] LOW — ECS Cluster with Container Insights disabled
+          #     CWE-778 / CVSS 3.3
+          # -------------------------------------------------------------------
+          - name: ecs-cluster
+            base:
+              apiVersion: ecs.aws.crossplane.io/v1alpha1
+              kind: Cluster
+              metadata:
+                name: vulnerable-ecs
+              spec:
+                forProvider:
+                  region: us-east-1
+                  settings:
+                    - name: containerInsights
+                      value: disabled               # <-- LOW: no observability
+                providerConfigRef:
+                  name: aws-provider
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-ecs"

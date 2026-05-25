@@ -1,0 +1,18 @@
+# =============================================================================
+# Crossplane CompositeResource (XR) — instantiates the vulnerable-infra
+# Composition pipeline.
+#
+# This is the claim / XR file passed to `crossplane render`.
+# Vulnerabilities live in the Composition (composition.yaml), not here.
+# =============================================================================
+
+apiVersion: mock.example.org/v1alpha1
+kind: XVulnerableInfra
+metadata:
+  name: vulnerable-infra-example
+spec:
+  compositionRef:
+    name: vulnerable-infra-composition
+  parameters:
+    environment: smoke-test
+    region: us-east-1

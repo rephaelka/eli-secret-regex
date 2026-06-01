@@ -111,7 +111,7 @@ spec:
                 name: vulnerable-sqs
               spec:
                 forProvider:
-                  region: us-east-1
+                  region: us-east-2
                   delaySeconds: 0
                   # kmsMasterKeyId intentionally omitted  <-- MEDIUM: no SSE
                 providerConfigRef:

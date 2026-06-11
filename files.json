@@ -3,5 +3,6 @@
   {"path": "s3.tf"},
   {"path": "aws_secrets.yml"},
   {"path": "package.json"},
-  {"path": "yarn.lock"}
+  {"path": "yarn.lock"},
+  {"path": "src/index.js"}
 ]
